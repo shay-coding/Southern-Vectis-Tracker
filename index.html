@@ -507,7 +507,8 @@ function shouldExcludeVehicle(v) {
   const identifier = (v.fleet_code || v.fleet_number || "").toString().trim().toUpperCase();
   if (!identifier) return true; // hide vehicles that render as '-' or have no unique code
   if (EXCLUDED_FLEET_IDENTIFIERS.has(identifier)) return true;
-  if (!getRouteNumber(v)) return true; // hide vehicles with no route / dash display
+  const route = getRouteNumber(v);
+  if (route && route.toString().trim() === "-") return true; // hide explicit dash route displays only
   return false;
 }
 
@@ -537,11 +538,11 @@ async function loadVehicles() {
 async function loadTrips() {
   const firstUrl = "https://bustimes.org/api/trips/?operator=SVCT";
   const first = await fetchPage(firstUrl);
-  let results = (first.results || []).filter(t => t.operator?.noc === "SVCT");
+  let results = (first.results || []).filter(t => t.operator?.id === "SVCT");
   let next = first.next;
   while (next) {
     const page = await fetchPage(next);
-    results = results.concat((page.results || []).filter(t => t.operator?.noc === "SVCT"));
+    results = results.concat((page.results || []).filter(t => t.operator?.id === "SVCT"));
     next = page.next;
   }
   return results;
