@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Southern Vectis — Fleet Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --green: #00a651;
+      --green-dark: #007a3d;
+      --green-glow: rgba(0,166,81,0.18);
+      --cream: #f5f0e8;
+      --ink: #1a1a1a;
+      --card-bg: #ffffff;
+      --muted: #6b7280;
+      --border: #e5e0d8;
+      --live: #ef4444;
+      --common: #00a651;
+      --uncommon: #f59e0b;
+      --rare: #8b5cf6;
+      --shadow: 0 2px 16px rgba(0,0,0,0.07);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Space Mono', monospace;
+      background: var(--cream);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: var(--ink);
+      color: #fff;
+      padding: 0 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 3px solid var(--green);
+    }
+
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-logo {
+      width: 36px;
+      height: 36px;
+      background: var(--green);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .header-logo svg { width: 22px; height: 22px; fill: #fff; }
+
+    .header-title {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.15rem;
+      letter-spacing: -0.02em;
+    }
+
+    .header-title span { color: var(--green); }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 0.72rem;
+      color: #aaa;
+    }
+
+    #refresh-btn {
+      background: var(--green);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 0.8rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.2s;
+    }
+
+    #refresh-btn:hover { background: var(--green-dark); }
+    #refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #refresh-btn svg {
+      width: 14px; height: 14px; fill: none;
+      stroke: #fff; stroke-width: 2.2;
+      stroke-linecap: round; stroke-linejoin: round;
+      transition: transform 0.5s;
+    }
+    #refresh-btn.spinning svg { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── TOOLBAR ── */
+    .toolbar {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: 12px 2rem;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar label {
+      font-size: 0.7rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .toolbar select, .toolbar input {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.78rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 10px;
+      background: var(--cream);
+      color: var(--ink);
+      outline: none;
+    }
+
+    .toolbar select:focus, .toolbar input:focus {
+      border-color: var(--green);
+    }
+
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .divider { color: var(--border); font-size: 1.2rem; }
+
+    #stats {
+      margin-left: auto;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    /* ── GRID ── */
+    main {
+      padding: 1.5rem 2rem 3rem;
+    }
+
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 14px;
+    }
+
+    /* ── VEHICLE CARD ── */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.15s, box-shadow 0.15s;
+      animation: fadeIn 0.3s ease both;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(0,0,0,0.11);
+    }
+
+    .card.is-live {
+      border-color: var(--green);
+    }
+
+    .card.is-live::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--green);
+    }
+
+    /* Top row */
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .fleet-info {}
+
+    .fleet-number {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.35rem;
+      letter-spacing: -0.02em;
+      line-height: 1;
+    }
+
+    .reg-plate {
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-top: 3px;
+      letter-spacing: 0.04em;
+    }
+
+    .badges {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 5px;
+    }
+
+    /* Live badge */
+    .badge-live {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      color: var(--live);
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 0.65rem;
+      letter-spacing: 0.08em;
+      border-radius: 100px;
+      padding: 3px 9px;
+    }
+
+    .badge-live .dot {
+      width: 7px; height: 7px;
+      background: var(--live);
+      border-radius: 50%;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.5; transform: scale(0.7); }
+    }
+
+    /* Rarity badge */
+    .badge-rarity {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 0.65rem;
+      letter-spacing: 0.06em;
+      border-radius: 100px;
+      padding: 3px 9px;
+      border: 1px solid currentColor;
+    }
+
+    .badge-rarity.common  { color: var(--common);   background: rgba(0,166,81,0.08); }
+    .badge-rarity.uncommon{ color: var(--uncommon); background: rgba(245,158,11,0.08); }
+    .badge-rarity.rare    { color: var(--rare);     background: rgba(139,92,246,0.08); }
+
+    /* Divider */
+    .card-divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 10px 0;
+    }
+
+    /* Bottom row */
+    .card-bottom {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .route-pill {
+      background: var(--ink);
+      color: #fff;
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1rem;
+      border-radius: 8px;
+      padding: 4px 12px;
+      min-width: 44px;
+      text-align: center;
+      letter-spacing: -0.01em;
+    }
+
+    .route-pill.no-route {
+      background: #e5e0d8;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.75rem;
+    }
+
+    .trip-info {
+      flex: 1;
+      text-align: right;
+      overflow: hidden;
+    }
+
+    .trip-dest {
+      font-family: 'Syne', sans-serif;
+      font-weight: 600;
+      font-size: 0.85rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--ink);
+    }
+
+    .trip-time {
+      font-size: 0.68rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .no-trip {
+      font-size: 0.75rem;
+      color: #ccc;
+      font-style: italic;
+    }
+
+    /* Vehicle type line */
+    .card-type {
+      font-size: 0.67rem;
+      color: var(--muted);
+      margin-top: 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── STATES ── */
+    #loading, #error-msg {
+      text-align: center;
+      padding: 80px 20px;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid var(--border);
+      border-top-color: var(--green);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    #error-msg { color: var(--live); }
+
+    .last-updated {
+      font-size: 0.7rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-brand">
+    <div class="header-logo">
+      <svg viewBox="0 0 24 24"><path d="M3 11l2-2 2 2M17 11l2-2 2 2M5 19V9a7 7 0 0114 0v10a2 2 0 01-2 2H7a2 2 0 01-2-2zM9 20v-1h6v1M9 14h.01M15 14h.01"/></svg>
+    </div>
+    <div class="header-title">Southern <span>Vectis</span> Fleet</div>
+  </div>
+  <div class="header-right">
+    <span class="last-updated" id="last-updated">—</span>
+    <button id="refresh-btn">
+      <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      Refresh
+    </button>
+  </div>
+</header>
+
+<div class="toolbar">
+  <div class="filter-group">
+    <label for="filter-status">Status</label>
+    <select id="filter-status">
+      <option value="all">All</option>
+      <option value="live">Live only</option>
+      <option value="inactive">Inactive only</option>
+    </select>
+  </div>
+  <span class="divider">|</span>
+  <div class="filter-group">
+    <label for="filter-rarity">Rarity</label>
+    <select id="filter-rarity">
+      <option value="all">All</option>
+      <option value="common">Common</option>
+      <option value="uncommon">Uncommon</option>
+      <option value="rare">Rare</option>
+    </select>
+  </div>
+  <span class="divider">|</span>
+  <div class="filter-group">
+    <label for="filter-route">Route</label>
+    <input id="filter-route" type="text" placeholder="e.g. 9" style="width:80px">
+  </div>
+  <span class="divider">|</span>
+  <div class="filter-group">
+    <label for="filter-search">Search</label>
+    <input id="filter-search" type="text" placeholder="Fleet / reg…" style="width:130px">
+  </div>
+  <div id="stats"></div>
+</div>
+
+<main>
+  <div id="loading"><div class="spinner"></div>Loading fleet data…</div>
+  <div id="error-msg" style="display:none"></div>
+  <div id="grid" style="display:none"></div>
+</main>
+
+<script>
+// ─── ALLOCATION DATA ──────────────────────────────────────────────────────────
+const ALLOCATIONS = {
+  "Scania N270UD Omnicity": {
+    common:   ["TNB","TDB","SL"],
+    uncommon: ["TSS","COA"],
+    rare:     ["1","2","3","4","5","6","7","8","9","12","22","24","32","37","38","39"]
+  },
+  "Wright StreetDeck Electroliner": {
+    common:   ["1","2","3","4","5","6","8","9","37","38"],
+    uncommon: ["7","12"],
+    rare:     ["22","24","32","39","TNB","TDB","TSS","COA","SL"]
+  },
+  "ADL Enviro400": {
+    common:   ["2","3","4","5","6","7","8","9","12","37","38","TSS","COA","SL"],
+    uncommon: ["1"],
+    rare:     ["22","24","32","39","TNB","TDB"]
+  },
+  "ADL Enviro400 MMC": {
+    common:   ["1","2","3","4","5","6","7","8","9","12","37"],
+    uncommon: ["38"],
+    rare:     ["22","24","32","39","TNB","TDB","TSS","COA","SL"]
+  },
+  "Volvo B7TL Plaxton President": {
+    common:   ["TNB","TDB","SL"],
+    uncommon: ["TSS","COA"],
+    rare:     ["1","2","3","4","5","6","7","8","9","12","22","24","32","37","38","39"]
+  },
+  "Optare Solo SR": {
+    common:   ["6","22","24","32","39"],
+    uncommon: ["38"],
+    rare:     ["1","2","3","4","5","7","8","9","12","37","TNB","TDB","TSS","COA","SL"]
+  }
+};
+
+// Match vehicle_type.name → allocation key (fuzzy)
+function matchVehicleType(typeName) {
+  if (!typeName) return null;
+  const n = typeName.toLowerCase();
+  if (n.includes("scania") && n.includes("omnicity")) return "Scania N270UD Omnicity";
+  if (n.includes("streetdeck") || n.includes("electroliner")) return "Wright StreetDeck Electroliner";
+  if (n.includes("enviro400 mmc") || n.includes("e400 mmc")) return "ADL Enviro400 MMC";
+  if (n.includes("enviro400") || n.includes("e400")) return "ADL Enviro400";
+  if (n.includes("plaxton president") || (n.includes("b7tl") && n.includes("plaxton"))) return "Volvo B7TL Plaxton President";
+  if (n.includes("optare solo") || n.includes("solo sr")) return "Optare Solo SR";
+  return null;
+}
+
+function getRarity(vehicleTypeName, routeNumber) {
+  const key = matchVehicleType(vehicleTypeName);
+  if (!key) return "rare"; // unknown type → everything rare
+  const alloc = ALLOCATIONS[key];
+  const r = (routeNumber || "").toString().trim().toUpperCase();
+  if (alloc.common.map(x=>x.toUpperCase()).includes(r))   return "common";
+  if (alloc.uncommon.map(x=>x.toUpperCase()).includes(r)) return "uncommon";
+  return "rare";
+}
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let allVehicles = [];
+let filterStatus = "all";
+let filterRarity = "all";
+let filterRoute  = "";
+let filterSearch = "";
+
+// ─── API ─────────────────────────────────────────────────────────────────────
+async function fetchPage(url) {
+  // Use the Cloudflare Worker proxy at /api/proxy
+  // The worker rewrites to bustimes.org and adds the CORS header
+  const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
+  const res = await fetch(proxyUrl);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function loadAll() {
+  const firstUrl = "https://bustimes.org/api/vehicles/?operator=SVRN&limit=100";
+  const first = await fetchPage(firstUrl);
+  let results = first.results || [];
+  let next = first.next;
+  while (next) {
+    const page = await fetchPage(next);
+    results = results.concat(page.results || []);
+    next = page.next;
+  }
+  return results;
+}
+
+// ─── RENDER ──────────────────────────────────────────────────────────────────
+function getRouteNumber(v) {
+  return v.latest_journey?.route_name
+      || v.latest_journey?.service?.line_name
+      || null;
+}
+
+function getDestination(v) {
+  return v.latest_journey?.destination || null;
+}
+
+function getTripTime(v) {
+  const dep = v.latest_journey?.datetime;
+  if (!dep) return null;
+  return new Date(dep).toLocaleTimeString("en-GB", {hour:"2-digit", minute:"2-digit"});
+}
+
+function isLive(v) {
+  // If vehicle has been seen in the last 5 minutes, consider live
+  if (!v.datetime) return false;
+  const seen = new Date(v.datetime).getTime();
+  return (Date.now() - seen) < 5 * 60 * 1000;
+}
+
+function cardHtml(v) {
+  const fleet  = v.fleet_code || v.fleet_number || "—";
+  const reg    = v.reg || "";
+  const live   = isLive(v);
+  const route  = getRouteNumber(v);
+  const dest   = getDestination(v);
+  const time   = getTripTime(v);
+  const type   = v.vehicle_type?.name || "";
+  const rarity = getRarity(type, route || "");
+
+  const liveBadge = live
+    ? `<div class="badge-live"><span class="dot"></span>LIVE</div>` : "";
+
+  const rarityLabel = route
+    ? `<div class="badge-rarity ${rarity}">${rarity.toUpperCase()}</div>` : "";
+
+  const routePill = route
+    ? `<div class="route-pill">${route}</div>`
+    : `<div class="route-pill no-route">–</div>`;
+
+  const tripSection = (dest || time)
+    ? `<div class="trip-info">
+         ${dest ? `<div class="trip-dest" title="${dest}">${dest}</div>` : ""}
+         ${time ? `<div class="trip-time">dep. ${time}</div>` : ""}
+       </div>`
+    : `<div class="trip-info"><span class="no-trip">not in service</span></div>`;
+
+  return `
+    <div class="card ${live ? "is-live" : ""}" data-id="${v.id}">
+      <div class="card-top">
+        <div class="fleet-info">
+          <div class="fleet-number">${fleet}</div>
+          <div class="reg-plate">${reg}</div>
+        </div>
+        <div class="badges">
+          ${liveBadge}
+          ${rarityLabel}
+        </div>
+      </div>
+      <hr class="card-divider">
+      <div class="card-bottom">
+        ${routePill}
+        ${tripSection}
+      </div>
+      ${type ? `<div class="card-type">${type}</div>` : ""}
+    </div>`;
+}
+
+function applyFilters() {
+  return allVehicles.filter(v => {
+    // status
+    if (filterStatus === "live"     && !isLive(v)) return false;
+    if (filterStatus === "inactive" &&  isLive(v)) return false;
+    // rarity
+    if (filterRarity !== "all") {
+      const route = getRouteNumber(v);
+      const r = getRarity(v.vehicle_type?.name || "", route || "");
+      if (r !== filterRarity) return false;
+    }
+    // route
+    if (filterRoute) {
+      const route = (getRouteNumber(v) || "").toString().toLowerCase();
+      if (!route.includes(filterRoute.toLowerCase())) return false;
+    }
+    // search
+    if (filterSearch) {
+      const s = filterSearch.toLowerCase();
+      const fleet = (v.fleet_code || v.fleet_number || "").toString().toLowerCase();
+      const reg   = (v.reg || "").toLowerCase();
+      if (!fleet.includes(s) && !reg.includes(s)) return false;
+    }
+    return true;
+  });
+}
+
+function render() {
+  const grid = document.getElementById("grid");
+  const filtered = applyFilters();
+
+  const liveCount = allVehicles.filter(isLive).length;
+  document.getElementById("stats").textContent =
+    `${filtered.length} shown · ${liveCount} live · ${allVehicles.length} total`;
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px 0;color:var(--muted);font-size:0.85rem;">No vehicles match your filters.</div>`;
+  } else {
+    // Sort: live first, then by fleet number
+    filtered.sort((a,b) => {
+      const aLive = isLive(a) ? 0 : 1;
+      const bLive = isLive(b) ? 0 : 1;
+      if (aLive !== bLive) return aLive - bLive;
+      const aFleet = parseInt(a.fleet_number) || 9999;
+      const bFleet = parseInt(b.fleet_number) || 9999;
+      return aFleet - bFleet;
+    });
+    grid.innerHTML = filtered.map(cardHtml).join("");
+  }
+}
+
+// ─── LOAD ────────────────────────────────────────────────────────────────────
+async function load() {
+  const loading  = document.getElementById("loading");
+  const errorMsg = document.getElementById("error-msg");
+  const grid     = document.getElementById("grid");
+  const btn      = document.getElementById("refresh-btn");
+
+  loading.style.display = "block";
+  errorMsg.style.display = "none";
+  grid.style.display = "none";
+  btn.disabled = true;
+  btn.classList.add("spinning");
+
+  try {
+    allVehicles = await loadAll();
+    loading.style.display = "none";
+    grid.style.display = "grid";
+    document.getElementById("last-updated").textContent =
+      "Updated " + new Date().toLocaleTimeString("en-GB", {hour:"2-digit",minute:"2-digit"});
+    render();
+  } catch(err) {
+    loading.style.display = "none";
+    errorMsg.style.display = "block";
+    errorMsg.textContent = `⚠ Failed to load fleet data: ${err.message}`;
+    console.error(err);
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove("spinning");
+  }
+}
+
+// ─── EVENTS ──────────────────────────────────────────────────────────────────
+document.getElementById("refresh-btn").addEventListener("click", load);
+
+document.getElementById("filter-status").addEventListener("change", e => {
+  filterStatus = e.target.value; render();
+});
+document.getElementById("filter-rarity").addEventListener("change", e => {
+  filterRarity = e.target.value; render();
+});
+document.getElementById("filter-route").addEventListener("input", e => {
+  filterRoute = e.target.value.trim(); render();
+});
+document.getElementById("filter-search").addEventListener("input", e => {
+  filterSearch = e.target.value.trim(); render();
+});
+
+// Auto-refresh every 60 seconds
+setInterval(load, 60000);
+load();
+</script>
+</body>
+</html>
