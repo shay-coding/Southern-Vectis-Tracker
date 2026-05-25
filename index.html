@@ -508,7 +508,7 @@ async function fetchPage(url) {
 }
 
 async function loadAll() {
-  const firstUrl = "https://bustimes.org/api/vehicles/?operator=SVRN&limit=100";
+  const firstUrl = "https://bustimes.org/api/vehicles/?operator=SVCT";
   const first = await fetchPage(firstUrl);
   let results = first.results || [];
   let next = first.next;
