@@ -500,7 +500,7 @@ let filterSearch = "";
 const EXCLUDED_FLEET_IDENTIFIERS = new Set([
   "404", "406", "604", "607", "702", "1190", "1973", "1991", "1994", "1996", "2002", "2287", "4413",
   "6909", "6910", "6924", "6927", "6931", "6934", "6943", "6944", "9500", "9503", "9505", "9506",
-  "9507", "9508", "9510", "VE2", "VE3", "DOE23", "DOE14", "DOE9", "DOE26", "DOE35"
+  "9507", "9508", "9510", "VE2", "VE3", "DOE23", "DOE14", "DOE9", "DOE26", "DOE35", "DOE36", "EV1"
 ]);
 
 function shouldExcludeVehicle(v) {
@@ -510,6 +510,11 @@ function shouldExcludeVehicle(v) {
   const route = getRouteNumber(v);
   if (route && route.toString().trim() === "-") return true; // hide explicit dash route displays only
   return false;
+}
+
+function getVehicleIdentifier(vehicle) {
+  const code = (vehicle.fleet_code || vehicle.fleet_number || vehicle.reg || "").toString().trim().toUpperCase();
+  return code || null;
 }
 
 // ─── API ─────────────────────────────────────────────────────────────────────
@@ -548,11 +553,31 @@ async function loadTrips() {
   return results;
 }
 
+async function loadJourneys() {
+  const firstUrl = "https://bustimes.org/api/vehiclejourneys/?operator=SVCT";
+  const first = await fetchPage(firstUrl);
+  let results = first.results || [];
+  let next = first.next;
+  while (next) {
+    const page = await fetchPage(next);
+    results = results.concat(page.results || []);
+    next = page.next;
+  }
+  return results;
+}
+
 async function loadAll() {
-  const [vehicles, trips] = await Promise.all([loadVehicles(), loadTrips()]);
+  const [vehicles, trips, journeys] = await Promise.all([loadVehicles(), loadTrips(), loadJourneys()]);
   const tripByJourneyCode = new Map(trips.map(t => [t.vehicle_journey_code, t]));
+  const journeyByVehicleCode = new Map(journeys
+    .map(j => [getVehicleIdentifier(j.vehicle), j])
+    .filter(([key]) => !!key)
+  );
+
   return vehicles
     .map(v => {
+      const vehicleKey = getVehicleIdentifier(v);
+      v.journey = journeyByVehicleCode.get(vehicleKey) || null;
       v.trip = tripByJourneyCode.get(v.latest_journey?.vehicle_journey_code) || null;
       return v;
     })
@@ -561,20 +586,22 @@ async function loadAll() {
 
 // ─── RENDER ──────────────────────────────────────────────────────────────────
 function getRouteNumber(v) {
-  return v.latest_journey?.route_name
+  return v.journey?.route_name
+      || v.latest_journey?.route_name
       || v.latest_journey?.service?.line_name
       || v.trip?.service?.line_name
       || null;
 }
 
 function getDestination(v) {
-  return v.trip?.headsign
+  return v.journey?.destination
+      || v.trip?.headsign
       || v.latest_journey?.destination
       || null;
 }
 
 function getTripTime(v) {
-  const actual = v.latest_journey?.datetime;
+  const actual = v.journey?.datetime || v.latest_journey?.datetime;
   if (actual) {
     return new Date(actual).toLocaleTimeString("en-GB", {hour:"2-digit", minute:"2-digit"});
   }
