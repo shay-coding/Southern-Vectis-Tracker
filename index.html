@@ -497,6 +497,20 @@ let filterRarity = "all";
 let filterRoute  = "";
 let filterSearch = "";
 
+const EXCLUDED_FLEET_IDENTIFIERS = new Set([
+  "404", "406", "604", "607", "702", "1190", "1973", "1991", "1994", "1996", "2002", "2287", "4413",
+  "6909", "6910", "6924", "6927", "6931", "6934", "6943", "6944", "9500", "9503", "9505", "9506",
+  "9507", "9508", "9510", "VE2", "VE3", "DOE23", "DOE14", "DOE9", "DOE26", "DOE35"
+]);
+
+function shouldExcludeVehicle(v) {
+  const identifier = (v.fleet_code || v.fleet_number || "").toString().trim().toUpperCase();
+  if (!identifier) return true; // hide vehicles that render as '-' or have no unique code
+  if (EXCLUDED_FLEET_IDENTIFIERS.has(identifier)) return true;
+  if (!getRouteNumber(v)) return true; // hide vehicles with no route / dash display
+  return false;
+}
+
 // ─── API ─────────────────────────────────────────────────────────────────────
 async function fetchPage(url) {
   // Use the Cloudflare Worker proxy at /api/proxy
@@ -507,7 +521,7 @@ async function fetchPage(url) {
   return res.json();
 }
 
-async function loadAll() {
+async function loadVehicles() {
   const firstUrl = "https://bustimes.org/api/vehicles/?operator=SVCT";
   const first = await fetchPage(firstUrl);
   let results = first.results || [];
@@ -520,21 +534,51 @@ async function loadAll() {
   return results;
 }
 
+async function loadTrips() {
+  const firstUrl = "https://bustimes.org/api/trips/?operator=SVCT";
+  const first = await fetchPage(firstUrl);
+  let results = (first.results || []).filter(t => t.operator?.noc === "SVCT");
+  let next = first.next;
+  while (next) {
+    const page = await fetchPage(next);
+    results = results.concat((page.results || []).filter(t => t.operator?.noc === "SVCT"));
+    next = page.next;
+  }
+  return results;
+}
+
+async function loadAll() {
+  const [vehicles, trips] = await Promise.all([loadVehicles(), loadTrips()]);
+  const tripByJourneyCode = new Map(trips.map(t => [t.vehicle_journey_code, t]));
+  return vehicles
+    .map(v => {
+      v.trip = tripByJourneyCode.get(v.latest_journey?.vehicle_journey_code) || null;
+      return v;
+    })
+    .filter(v => !shouldExcludeVehicle(v));
+}
+
 // ─── RENDER ──────────────────────────────────────────────────────────────────
 function getRouteNumber(v) {
   return v.latest_journey?.route_name
       || v.latest_journey?.service?.line_name
+      || v.trip?.service?.line_name
       || null;
 }
 
 function getDestination(v) {
-  return v.latest_journey?.destination || null;
+  return v.trip?.headsign
+      || v.latest_journey?.destination
+      || null;
 }
 
 function getTripTime(v) {
-  const dep = v.latest_journey?.datetime;
-  if (!dep) return null;
-  return new Date(dep).toLocaleTimeString("en-GB", {hour:"2-digit", minute:"2-digit"});
+  const actual = v.latest_journey?.datetime;
+  if (actual) {
+    return new Date(actual).toLocaleTimeString("en-GB", {hour:"2-digit", minute:"2-digit"});
+  }
+  const scheduled = v.trip?.start;
+  return scheduled ? scheduled.slice(0, 5) : null;
 }
 
 function isLive(v) {
