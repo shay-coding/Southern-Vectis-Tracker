@@ -496,6 +496,7 @@ let filterStatus = "all";
 let filterRarity = "all";
 let filterRoute  = "";
 let filterSearch = "";
+let partialLoadMessage = "";
 
 const EXCLUDED_FLEET_IDENTIFIERS = new Set([
   "404", "406", "604", "607", "702", "1190", "1973", "1991", "1994", "1996", "2002", "2287", "4413",
@@ -518,13 +519,28 @@ function getVehicleIdentifier(vehicle) {
 }
 
 // ─── API ─────────────────────────────────────────────────────────────────────
-async function fetchPage(url) {
+async function fetchPage(url, retries = 1) {
   // Use the Cloudflare Worker proxy at /api/proxy
   // The worker rewrites to bustimes.org and adds the CORS header
   const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
-  const res = await fetch(proxyUrl);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  try {
+    const res = await fetch(proxyUrl);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      if (retries > 0 && res.status >= 500) {
+        console.warn(`Retrying ${proxyUrl} after HTTP ${res.status}`);
+        return fetchPage(url, retries - 1);
+      }
+      throw new Error(`HTTP ${res.status} ${res.statusText} for ${proxyUrl}${body ? ` - ${body.slice(0,200)}` : ""}`);
+    }
+    return res.json();
+  } catch (err) {
+    if (retries > 0) {
+      console.warn(`Fetch failed for ${proxyUrl}: ${err.message}. Retrying...`);
+      return fetchPage(url, retries - 1);
+    }
+    throw new Error(`Failed to fetch ${proxyUrl}: ${err.message}`);
+  }
 }
 
 async function loadVehicles() {
@@ -567,7 +583,31 @@ async function loadJourneys() {
 }
 
 async function loadAll() {
-  const [vehicles, trips, journeys] = await Promise.all([loadVehicles(), loadTrips(), loadJourneys()]);
+  const vehicles = await loadVehicles();
+  let trips = [];
+  let journeys = [];
+  let tripsFailed = false;
+  let journeysFailed = false;
+
+  try {
+    trips = await loadTrips();
+  } catch (err) {
+    tripsFailed = true;
+    console.warn('loadTrips failed:', err);
+  }
+
+  try {
+    journeys = await loadJourneys();
+  } catch (err) {
+    journeysFailed = true;
+    console.warn('loadJourneys failed:', err);
+  }
+
+  partialLoadMessage = "";
+  if (tripsFailed || journeysFailed) {
+    partialLoadMessage = `Loaded fleet list, but ${tripsFailed && journeysFailed ? "trip and journey data" : tripsFailed ? "trip data" : "journey data"} failed.`;
+  }
+
   const tripByJourneyCode = new Map(trips.map(t => [t.vehicle_journey_code, t]));
   const journeyByVehicleCode = new Map(journeys
     .map(j => [getVehicleIdentifier(j.vehicle), j])
@@ -697,7 +737,7 @@ function render() {
 
   const liveCount = allVehicles.filter(isLive).length;
   document.getElementById("stats").textContent =
-    `${filtered.length} shown · ${liveCount} live · ${allVehicles.length} total`;
+    `${filtered.length} shown · ${liveCount} live · ${allVehicles.length} total${partialLoadMessage ? ` · ${partialLoadMessage}` : ""}`;
 
   if (filtered.length === 0) {
     grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px 0;color:var(--muted);font-size:0.85rem;">No vehicles match your filters.</div>`;
